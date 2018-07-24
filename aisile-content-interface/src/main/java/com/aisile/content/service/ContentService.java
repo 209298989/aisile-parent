@@ -1,0 +1,18 @@
+package com.aisile.content.service;
+
+import java.util.List;
+import java.util.Map;
+
+import com.aisile.pojo.TbContent;
+import com.aisile.pojo.entity.PageResult;
+
+public interface ContentService {
+	public List<TbContent> findAll();
+	public PageResult findPage(int pageNum,int pageSize);
+	public void add(TbContent content);
+	public void update(TbContent content);
+	public TbContent findOne(Long id);
+	public void delete(Long [] ids);
+	public PageResult findPage(TbContent content, int pageNum,int pageSize);
+	public List<TbContent> findByCategoryId(Long categoryId);
+}

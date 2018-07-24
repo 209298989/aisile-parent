@@ -1,0 +1,26 @@
+package com.aisile.sellergoods.service;
+
+import java.util.List;
+
+import com.aisile.pojo.TbGoods;
+import com.aisile.pojo.entity.PageResult;
+import com.aisile.pojogroup.Goods;
+
+public interface GoodsService {
+
+	void add(Goods goods);
+
+	List<TbGoods> findAll();
+
+	PageResult findPage(int page, int rows);
+
+	PageResult findSearch(TbGoods goods, int page, int rows);
+
+	Goods findOne(Long id);
+
+	void update(Goods goods);
+
+	void updateStatus(String selectId, Long[] selectIds);
+
+	void isDelete(String deleteId, Long[] selectIds);
+}

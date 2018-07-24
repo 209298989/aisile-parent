@@ -1,0 +1,90 @@
+package com.aisile.manager.controller;
+
+import java.util.List;
+
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.aisile.pojo.TbGoods;
+import com.aisile.pojo.entity.PageResult;
+import com.aisile.pojo.entity.Result;
+import com.aisile.pojogroup.Goods;
+import com.aisile.sellergoods.service.GoodsService;
+import com.alibaba.dubbo.config.annotation.Reference;
+
+@RestController
+@RequestMapping("/goods")
+public class GoodsController {
+	@Reference
+	private GoodsService goodsService;
+	@RequestMapping("/add")
+	public Result add(@RequestBody Goods goods){
+		//获取登录名
+		String sellerId = SecurityContextHolder.getContext().getAuthentication().getName();
+		goods.getGoods().setSellerId(sellerId);//设置商家ID
+		try {
+			goodsService.add(goods);
+			return new Result(true, "增加成功");
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new Result(false, "增加失败");
+		}
+	}
+	@RequestMapping("/findAll")
+	public List<TbGoods> findAll(){			
+		return goodsService.findAll();
+	}
+	
+	@RequestMapping("/findPage")
+	public PageResult  findPage(int page,int rows){			
+		return goodsService.findPage(page, rows);
+	}
+	@RequestMapping("/search")
+	public PageResult search(@RequestBody TbGoods goods, int page, int rows  ){
+		return goodsService.findSearch(goods, page, rows);		
+	}
+	@RequestMapping("/findOne")
+	public Goods findOne(Long id){
+		return goodsService.findOne(id);
+	}
+	@RequestMapping("/update")
+	public Result update(@RequestBody Goods goods){
+		//由于安全考虑,在商户后台执行的商品修改,必须要校验提交的商品属于该用户
+		try {
+			//校验是否是当前商家的id
+			Goods goods2 = goodsService.findOne(goods.getGoods().getId());
+			//获取当前登录的商家ID
+			String sellerId = SecurityContextHolder.getContext().getAuthentication().getName();
+			//如果传递过来的商家ID并不是当前登录的用户的ID,则属于非法操作
+			if (!goods2.getGoods().getSellerId().equals(sellerId)||!goods.getGoods().getSellerId().equals(sellerId)) {
+				return new Result(false, "操作非法");
+			}
+			goodsService.update(goods);
+			return new Result(true, "修改成功");
+		} catch (Exception e) {
+			return new Result(false, "修改失败");
+		}
+	}
+	@RequestMapping("updateStatus")
+	public Result updateStatus(String selectId,Long[] selectIds){
+		try {
+			goodsService.updateStatus(selectId,selectIds);
+			return new Result(true, "修改成功");
+		} catch (Exception e) {
+			return new Result(false, "修改失败");
+		}
+		
+	}
+	@RequestMapping("isDelete")
+	public Result isDelete(String deleteId,Long[] selectIds){
+		try {
+			goodsService.isDelete(deleteId,selectIds);
+			return new Result(true, "修改成功");
+		} catch (Exception e) {
+			return new Result(false, "修改失败");
+		}
+		
+	}
+}

@@ -1,0 +1,216 @@
+package com.aisile.sellergoods.service.impl;
+
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.aisile.mapper.TbBrandMapper;
+import com.aisile.mapper.TbGoodsDescMapper;
+import com.aisile.mapper.TbGoodsMapper;
+import com.aisile.mapper.TbItemCatMapper;
+import com.aisile.mapper.TbItemMapper;
+import com.aisile.mapper.TbSellerMapper;
+import com.aisile.pojo.TbBrand;
+import com.aisile.pojo.TbGoods;
+import com.aisile.pojo.TbGoodsDesc;
+import com.aisile.pojo.TbGoodsExample;
+import com.aisile.pojo.TbGoodsExample.Criteria;
+import com.aisile.pojo.TbItem;
+import com.aisile.pojo.TbItemCat;
+import com.aisile.pojo.TbItemExample;
+import com.aisile.pojo.TbSeller;
+import com.aisile.pojo.entity.PageResult;
+import com.aisile.pojogroup.Goods;
+import com.aisile.sellergoods.service.GoodsService;
+import com.alibaba.dubbo.config.annotation.Service;
+import com.alibaba.fastjson.JSON;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
+@Service
+public class GoodsServiceImpl implements GoodsService {
+	@Autowired
+	private TbGoodsMapper goodsMapper;
+	@Autowired
+	private TbGoodsDescMapper goodsDescMapper;
+	@Autowired
+	private TbItemMapper itemMapper;
+	@Autowired
+	private TbBrandMapper brandMapper;
+	@Autowired
+	private TbItemCatMapper itemCatMapper;
+	@Autowired
+	private TbSellerMapper sellerMapper;
+	@Override
+	public void add(Goods goods) {
+		goods.getGoods().setAuditStatus("0");		
+		goodsMapper.insert(goods.getGoods());	//插入商品表
+		goods.getGoodsDesc().setGoodsId(goods.getGoods().getId());
+		goodsDescMapper.insert(goods.getGoodsDesc());//插入商品扩展数据
+		if("1".equals(goods.getGoods().getIsEnableSpec())){
+			for(TbItem item :goods.getItemList()){
+				//标题
+				String title= goods.getGoods().getGoodsName();
+				Map<String,Object> specMap = JSON.parseObject(item.getSpec());
+				for(String key:specMap.keySet()){
+					title+=" "+ specMap.get(key);
+				}
+				item.setTitle(title);
+				setItemValus(goods,item);
+				itemMapper.insert(item);
+			}		
+		}else{					
+			TbItem item=new TbItem();
+			item.setTitle(goods.getGoods().getGoodsName());//商品KPU+规格描述串作为SKU名称
+			item.setPrice( goods.getGoods().getPrice() );//价格			
+			item.setStatus("1");//状态
+			item.setIsDefault("1");//是否默认			
+			item.setNum(99999);//库存数量
+			item.setSpec("{}");			
+			setItemValus(goods,item);
+			itemMapper.insert(item);
+		}	
+	}
+	private void setItemValus(Goods goods,TbItem item) {
+		item.setGoodsId(goods.getGoods().getId());//商品SPU编号
+		item.setSellerId(goods.getGoods().getSellerId());//商家编号
+		item.setCategoryid(goods.getGoods().getCategory3Id());//商品分类编号（3级）
+		item.setCreateTime(new Date());//创建日期
+		item.setUpdateTime(new Date());//修改日期 
+		
+		//品牌名称
+		TbBrand brand = brandMapper.selectByPrimaryKey(goods.getGoods().getBrandId());
+		item.setBrand(brand.getName());
+		//分类名称
+		TbItemCat itemCat = itemCatMapper.selectByPrimaryKey(goods.getGoods().getCategory3Id());
+		item.setCategory(itemCat.getName());
+		
+		//商家名称
+		TbSeller seller = sellerMapper.selectByPrimaryKey(goods.getGoods().getSellerId());
+		item.setSeller(seller.getNickName());
+		
+		//图片地址（取spu的第一个图片）
+		List<Map> imageList = JSON.parseArray(goods.getGoodsDesc().getItemImages(), Map.class) ;
+		if(imageList.size()>0){
+			item.setImage ( (String)imageList.get(0).get("url"));
+		}
+	}
+	@Override
+	public List<TbGoods> findAll() {
+		//条件为空是查询全部  
+		return goodsMapper.selectByExample(null);
+	}
+
+	@Override
+	public PageResult findPage(int pageNum, int pageSize) {
+		PageHelper.startPage(pageNum,pageSize);
+		List<TbGoods> tbGoods=goodsMapper.selectByExample(null);
+		PageInfo<TbGoods> page=new PageInfo<>(tbGoods);
+		return new PageResult(page.getTotal(),page.getList());
+	}
+	@Override
+	public PageResult findSearch(TbGoods goods, int pageNum, int pageSize) {
+		PageHelper.startPage(pageNum, pageSize);		
+		TbGoodsExample example=new TbGoodsExample();
+		Criteria criteria = example.createCriteria();
+		criteria.andIsDeleteIsNull();
+		if(goods.getSellerId()!=null && goods.getSellerId().length()>0){
+				criteria.andSellerIdEqualTo(goods.getSellerId());
+		}
+		if(goods.getAuditStatus()!=null&&goods.getAuditStatus().length()>0){
+			criteria.andAuditStatusEqualTo(goods.getAuditStatus());
+		}
+		if(goods.getGoodsName()!=null&&goods.getGoodsName().length()>0){
+			criteria.andGoodsNameLike("%"+goods.getGoodsName()+"%");
+		}
+		Page<TbGoods> page= (Page<TbGoods>)goodsMapper.selectByExample(example);	
+		return new PageResult(page.getTotal(), page.getResult());
+	}
+	@Override
+	public Goods findOne(Long id) {
+		Goods goods = new Goods();
+		//商品的基本信息(spu)
+		TbGoods tbGoods = goodsMapper.selectByPrimaryKey(id);
+		goods.setGoods(tbGoods);
+		//商品的详细信息(spudesc)
+		TbGoodsDesc tbGoodsDesc = goodsDescMapper.selectByPrimaryKey(id);
+		goods.setGoodsDesc(tbGoodsDesc);
+		//商品的sku列表
+		TbItemExample example = new TbItemExample();
+		example.createCriteria().andGoodsIdEqualTo(id);
+		List<TbItem> itemList = itemMapper.selectByExample(example);
+		goods.setItemList(itemList);
+		return goods;
+	}
+	@Override
+	public void update(Goods goods) {
+		goods.getGoods().setAuditStatus("0");//设置未申请状态:如果是经过修改的商品 需要重新设置状态
+		goodsMapper.updateByPrimaryKey(goods.getGoods());//保存商品表
+		goodsDescMapper.updateByPrimaryKey(goods.getGoodsDesc());
+		//删除原有的sku列表数据
+		TbItemExample example = new TbItemExample();
+		com.aisile.pojo.TbItemExample.Criteria createCriteria = example.createCriteria();
+		createCriteria.andGoodsIdEqualTo(goods.getGoods().getId());
+		itemMapper.deleteByExample(example);
+		//添加新的sku列表数据
+		saveItemList(goods);
+	}
+	private void saveItemList(Goods goods){
+		List<TbItem> list = goods.getItemList();
+		//为什么空指针 程序运行自上向下 自左向右
+		if ("1".equals(goods.getGoods().getIsEnableSpec())) {//如果用户点击了启用
+			for (TbItem tbItem : list) {
+				//需要哪些属性
+				//商品标题 根据规格拼接
+				String title = goods.getGoods().getGoodsName();
+				Map<String, Object> specMap = JSON.parseObject(tbItem.getSpec());
+				for (String maps : specMap.keySet()) {
+					title += " " + specMap.get(maps);
+				}
+				tbItem.setTitle(title);//标题
+				setItemValus(goods, tbItem);
+				itemMapper.insert(tbItem);
+			}
+			
+		}
+	}
+	@Override
+	public void updateStatus(String selectId, Long[] selectIds) {
+		for (Long id : selectIds) {
+			TbGoods tbGoods = goodsMapper.selectByPrimaryKey(id);
+			tbGoods.setAuditStatus(selectId);
+			goodsMapper.updateByPrimaryKey(tbGoods);
+		}
+	}
+	@Override
+	public void isDelete(String deleteId, Long[] selectIds) {
+		for (Long id : selectIds) {
+			
+			TbGoods tbGoods = goodsMapper.selectByPrimaryKey(id);
+			tbGoods.setIsDelete(deleteId);
+			goodsMapper.updateByPrimaryKey(tbGoods);
+		}
+	}
+	@Override
+	public void updateJ(String marketableId, Long[] selectIds) {
+		for (Long id : selectIds) {
+			TbGoods tbGoods = goodsMapper.selectByPrimaryKey(id);
+			tbGoods.setIsMarketable(marketableId);
+			goodsMapper.updateByPrimaryKey(tbGoods);
+		}
+	}
+	@Override
+	public int findByStatus(Long[] selectIds) {
+		int i = 1;
+		for (Long id : selectIds) {
+			TbGoods tbGoods = goodsMapper.selectByPrimaryKey(id);
+			if (Integer.parseInt(tbGoods.getAuditStatus())!=3) {
+				i++;
+			}
+		}
+		return i;
+	}
+
+}
